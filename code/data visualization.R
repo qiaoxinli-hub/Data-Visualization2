@@ -138,68 +138,53 @@ fig1 <- ggplot(
     color = country
   )
 ) +
-  
-  # Reference line: no gender gap
   geom_hline(
     yintercept = 0,
     color = "gray65",
     linewidth = 0.4,
     linetype = "dashed"
   ) +
-  
-  # Reference line for the latest observation
   geom_vline(
     xintercept = latest_year,
     color = "gray85",
     linewidth = 0.4,
     linetype = "dotted"
   ) +
-  
-  # Trend lines
   geom_line(
     linewidth = 0.8,
     lineend = "round"
   ) +
-  
-  # Show every annual observation
   geom_point(
     size = 1.5,
     alpha = 0.85
   ) +
-  
-  # Highlight the latest observations
   geom_point(
     data = latest_values,
     size = 2.5
   ) +
-  
-  # Country colors
   scale_color_manual(
     values = country_colors
   ) +
-  
-  # X-axis
   scale_x_continuous(
     breaks = x_breaks,
     expand = expansion(
       mult = c(0.01, 0.01)
     )
   ) +
-  
-  # Y-axis
   scale_y_continuous(
     breaks = seq(0, 30, by = 5),
+    labels = scales::label_number(
+      suffix = " pp",
+      accuracy = 1
+    ),
     expand = expansion(
       mult = c(0, 0.02)
     )
   ) +
-  
-  # Limit the visible plotting area without deleting data
   coord_cartesian(
     xlim = c(first_year, latest_year),
     ylim = c(0, 30)
   ) +
-  
   labs(
     title = "Gender Gap in Labor Force Participation, 1990–2024",
     subtitle = "Male labor force participation minus female labor force participation",
@@ -213,22 +198,17 @@ fig1 <- ggplot(
       "."
     )
   ) +
-  
   guides(
     color = guide_legend(
       nrow = 2,
       byrow = TRUE
     )
   ) +
-  
   custom_theme +
-  
   theme(
     legend.position = "top"
   )
 
-
-# Display
 print(fig1)
 
 # Save Figure 1
@@ -566,135 +546,289 @@ ggsave(
 
 # ============================================================
 # FIGURE 3
-# Change in gender gap between 1990 and 2024
-# All countries
+# Gender gap by World Bank income group
 # ============================================================
 
-# Create the change in gender gap for all countries
-fig3_data <- analysis_data |>
+# ------------------------------------------------------------
+# 1. Prepare Figure 3 data
+# ------------------------------------------------------------
+
+gender_labor_wdi_clean <- read_csv(
+  "data/processed/gender_labor_wdi_clean.csv"
+)
+
+fig3_data <- gender_labor_wdi_clean |>
   filter(
-    year %in% c(1990, 2024),
-    !is.na(gender_gap)
-  ) |>
-  select(
-    iso3c,
-    country,
-    year,
-    gender_gap
-  ) |>
-  group_by(
-    iso3c,
-    country
-  ) |>
-  summarise(
-    gap_1990 = gender_gap[year == 1990][1],
-    gap_2024 = gender_gap[year == 2024][1],
-    .groups = "drop"
-  ) |>
-  # Keep only countries with observations in both years
-  filter(
-    !is.na(gap_1990),
-    !is.na(gap_2024)
+    year >= 1990,
+    year <= 2024,
+    !is.na(income),
+    !is.na(gender_gap),
+    income != "Aggregates",
+    region != "Aggregates"
   ) |>
   mutate(
-    gap_change = gap_2024 - gap_1990,
-    country = reorder(country, gap_change)
+    income = factor(
+      income,
+      levels = c(
+        "Low income",
+        "Lower middle income",
+        "Upper middle income",
+        "High income"
+      )
+    )
+  ) |>
+  filter(!is.na(income)) |>
+  group_by(
+    income,
+    year
+  ) |>
+  summarise(
+    mean_gender_gap = mean(
+      gender_gap,
+      na.rm = TRUE
+    ),
+    n_countries = n_distinct(country),
+    .groups = "drop"
   )
 
 
 # ------------------------------------------------------------
-# Figure 3
+# 2. Identify first and latest available years
+# ------------------------------------------------------------
+
+first_year_fig3 <- min(
+  fig3_data$year,
+  na.rm = TRUE
+)
+
+latest_year_fig3 <- max(
+  fig3_data$year,
+  na.rm = TRUE
+)
+
+
+# ------------------------------------------------------------
+# 3. Create x-axis breaks
+# ------------------------------------------------------------
+
+x_breaks_fig3 <- sort(unique(c(
+  seq(
+    first_year_fig3,
+    latest_year_fig3,
+    by = 5
+  ),
+  latest_year_fig3
+)))
+
+
+# ------------------------------------------------------------
+# 4. Get observations from the latest year
+# ------------------------------------------------------------
+
+latest_values_fig3 <- fig3_data |>
+  filter(
+    year == latest_year_fig3
+  )
+
+
+# ------------------------------------------------------------
+# 5. Define colors
+# ------------------------------------------------------------
+
+income_colors <- c(
+  "Low income" = "#c44e52",
+  "Lower middle income" = "#dd8452",
+  "Upper middle income" = "#55a868",
+  "High income" = "#4c72b0"
+)
+
+
+# ------------------------------------------------------------
+# 6. Determine Y-axis range
+# ------------------------------------------------------------
+
+y_max_fig3 <- ceiling(
+  max(
+    fig3_data$mean_gender_gap,
+    na.rm = TRUE
+  ) / 5
+) * 5
+
+
+# ------------------------------------------------------------
+# 7. Create Figure 3
 # ------------------------------------------------------------
 
 fig3 <- ggplot(
   fig3_data,
   aes(
-    x = gap_change,
-    y = country
+    x = year,
+    y = mean_gender_gap,
+    group = income,
+    color = income
   )
 ) +
   
-  # Zero line: no change in the gender gap
-  geom_vline(
-    xintercept = 0,
-    color = "gray55",
-    linewidth = 0.5
-  ) +
+  # ----------------------------------------------------------
+# Reference line: no gender gap
+# ----------------------------------------------------------
+
+geom_hline(
+  yintercept = 0,
+  color = "gray65",
+  linewidth = 0.4,
+  linetype = "dashed"
+) +
   
-  # Horizontal bars
-  geom_col(
-    fill = "#2b5c8f",
-    width = 0.65
-  ) +
+  # ----------------------------------------------------------
+# Reference line for the latest observation
+# ----------------------------------------------------------
+
+geom_vline(
+  xintercept = latest_year_fig3,
+  color = "gray85",
+  linewidth = 0.4,
+  linetype = "dotted"
+) +
   
-  # Reference labels
-  scale_x_continuous(
-    breaks = seq(
-      floor(min(fig3_data$gap_change, na.rm = TRUE) / 5) * 5,
-      ceiling(max(fig3_data$gap_change, na.rm = TRUE) / 5) * 5,
-      by = 5
-    ),
-    expand = expansion(
-      mult = c(0.02, 0.02)
-    )
-  ) +
+  # ----------------------------------------------------------
+# Income-group trend lines
+# ----------------------------------------------------------
+
+geom_line(
+  linewidth = 0.8,
+  lineend = "round"
+) +
   
-  labs(
-    title = "Change in the Gender Gap in Labor Force Participation, 1990–2024",
-    subtitle = "Countries are ranked by the change in the male–female participation gap",
-    x = "Change in gender gap (percentage points)",
-    y = NULL,
-    caption = paste0(
-      "Source: World Bank, World Development Indicators; ",
-      "ILO modeled estimates. Negative values indicate a narrowing gap."
-    )
-  ) +
+  # ----------------------------------------------------------
+# Show every annual observation
+# ----------------------------------------------------------
+
+geom_point(
+  size = 1.5,
+  alpha = 0.85
+) +
   
-  custom_theme +
+  # ----------------------------------------------------------
+# Highlight the latest observations
+# ----------------------------------------------------------
+
+geom_point(
+  data = latest_values_fig3,
+  size = 2.5
+) +
+  
+  # ----------------------------------------------------------
+# Income-group colors
+# ----------------------------------------------------------
+
+scale_color_manual(
+  values = income_colors
+) +
+  
+  # ----------------------------------------------------------
+# X-axis
+# ----------------------------------------------------------
+
+scale_x_continuous(
+  breaks = x_breaks_fig3,
+  expand = expansion(
+    mult = c(0.01, 0.01)
+  )
+) +
+  
+  # ----------------------------------------------------------
+# Y-axis
+# ----------------------------------------------------------
+
+scale_y_continuous(
+  breaks = seq(
+    0,
+    y_max_fig3,
+    by = 5
+  ),
+  labels = scales::label_number(
+    suffix = " pp",
+    accuracy = 1
+  ),
+  expand = expansion(
+    mult = c(0, 0.02)
+  )
+) +
+  
+  # ----------------------------------------------------------
+# Limit visible plotting area
+# ----------------------------------------------------------
+
+coord_cartesian(
+  xlim = c(
+    first_year_fig3,
+    latest_year_fig3
+  ),
+  ylim = c(
+    0,
+    y_max_fig3
+  )
+) +
+  
+  # ----------------------------------------------------------
+# Labels
+# ----------------------------------------------------------
+
+labs(
+  title = "Gender Gap in Labor Force Participation, 1990–2024",
+  subtitle = "Average country-level gender gap within each World Bank income group",
+  x = "Year",
+  y = "Gender gap (percentage points)",
+  color = "Income group",
+  caption = paste0(
+    "Source: World Bank, World Development Indicators; ",
+    "ILO modeled estimates. Aggregate observations are excluded. ",
+    "Latest observation: ",
+    latest_year_fig3,
+    "."
+  )
+) +
+  
+  # ----------------------------------------------------------
+# Legend
+# ----------------------------------------------------------
+
+guides(
+  color = guide_legend(
+    nrow = 2,
+    byrow = TRUE
+  )
+) +
+  
+  # ----------------------------------------------------------
+# Publication-style theme
+# ----------------------------------------------------------
+
+custom_theme +
+  
   theme(
-    legend.position = "none",
-    axis.text.y = element_text(
-      size = 7,
-      color = "gray20"
-    ),
-    axis.text.x = element_text(
-      size = 9
-    ),
-    panel.grid.major.y = element_blank(),
-    panel.grid.major.x = element_line(
-      color = "gray88",
-      linewidth = 0.3
-    ),
-    plot.margin = margin(
-      10, 20, 10, 10
-    )
+    legend.position = "top"
   )
 
 
-# Display
+# ------------------------------------------------------------
+# 8. Display Figure 3
+# ------------------------------------------------------------
+
 print(fig3)
 
+# ------------------------------------------------------------
+# 5. Save Figure 3
+# ------------------------------------------------------------
 
-# ------------------------------------------------------------
-# Save Figure 3
-# ------------------------------------------------------------
 
 ggsave(
-  filename = "results/figures/figure3_gender_gap_change_all_countries.png",
+  filename = "figure3_income_group_gender_gap_1990_2024.png",
   plot = fig3,
-  width = 10,
-  height = 18,
+  path = "results/figures",
+  width = 9,
+  height = 6,
   dpi = 300
 )
 
-
-# ============================================================
-# 6. Confirmation
-# ============================================================
-
-cat("\nVisualization completed successfully.\n")
-
-cat("\nFigures saved to:\n")
-cat("results/figures/figure1_gender_gap_trends.png\n")
-cat("results/figures/figure2_gdp_gender_gap_2024.png\n")
-cat("results/figures/figure3_gender_gap_change.png\n")
